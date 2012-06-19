@@ -1,0 +1,13 @@
+
+* README
+** Overview
+   After looking for the correct implementation for ghuolum
+   incremental compiler I decided to port it to guile 2.0
+
+** URL
+   https://bitbucket.org/rgrau/ghuloum-scheme
+   http://scheme2006.cs.uchicago.edu/#anincrementalapproachtocompilerconstruction
+
+** Author
+   Abdulaziz Ghuloum (original)
+   Raimon Grau (port)
