@@ -24,7 +24,7 @@
   (cond
    ((fixnum? x) (ash x fxshift))
    ((boolean? x) (if x bool_t bool_f))
-   ((char? x) (logior (ash x 8) #b1111))
+   ((char? x) (logior (ash (char->integer x) 8) #b1111))
    ((null? x) #b00111111)))
 
 (define (compile-program x port)
