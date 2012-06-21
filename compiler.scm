@@ -58,22 +58,31 @@
   (and (pair? expr)
        (primitive? (car expr))))
 
-(define (emit-primcall expr)
-  (let ([prim (car expr)]
-	[args (cdr expr)])
-    (check-primcall-args prim args)
-    (apply (primitive-emitter prim) args)))
+;; (define (emit-primcall expr)
+;;   (let ([prim (car expr)]
+;; 	[args (cdr expr)])
+;;     (check-primcall-args prim args)
+;;     (apply (primitive-emitter prim) args)))
 
-(define (emit-expr expr)
+(define (emit-immediate expr port)
+  (emit port "movl $~s, %eax" (immediate-rep expr)))
+
+(define (emit-expr port expr)
   (cond
-   [(immediata? expr) (emit-immediate expr)]
-   [(primcall? expr) (emit-primcall expr)]
+   [(immediate? expr) (emit-immediate expr port)]
+;   [(primcall? expr) (emit-primcall expr)]
    [else (error 'emit-expr "expression does not match supported ones")]))
 
-(define (emit-program expr)
-  (emit-function-header "scheme_entry")
-  (emit-expr expr)
-  (emit "ret"))
+(define (emit-program expr port)
+  (emit-function-header port "scheme_entry")
+  (emit-expr port expr)
+  (emit port "ret"))
+
+(define (emit-function-header port label)
+  (emit port ".text")
+  (emit port ".globl ~a" label)
+  (emit port ".type ~a, @function" label)
+  (emit port "~a:" label))
 
 (define (compile-program x port)
   (unless (immediate? x) (error 'immediaterror "not an immediate"))

@@ -1,4 +1,3 @@
-
 (define all-tests '())
 (define (void) (values))
 (define-syntax add-tests-with-string-output
@@ -24,7 +23,7 @@
 
 (define (run-compile expr)
   (let ([p (open-output-file "stst.s")])
-    (compile-program expr p)
+    (emit-program expr p)
     (close-output-port p)))
 
 ;; (define (run-compile expr)
