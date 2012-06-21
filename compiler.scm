@@ -1,6 +1,7 @@
 (load "tests/tests-driver.scm")
-;(load "tests/tests-1.1-req.scm")
-(load "tests/tests-1.2-req.scm")
+;; (load "tests/tests-1.1-req.scm")
+;; (load "tests/tests-1.2-req.scm")
+(load "tests/tests-1.3-req.scm")
 
 ;;; immediates
 
@@ -26,6 +27,53 @@
    ((boolean? x) (if x bool_t bool_f))
    ((char? x) (logior (ash (char->integer x) 8) #b1111))
    ((null? x) #b00111111)))
+
+;;; unary functions 1.3
+(define *is-prim* (make-object-property))
+(define *emitter* (make-object-property))
+(define *arg-count* (make-object-property))
+
+(define-syntax define-primitive
+  (syntax-rules ()
+    [(_ (prim-name arg* ...) b b* ...)
+     (begin
+       (set! (*is-prim* 'prim-name) #t)
+       (set! (*arg-count* 'prim-name)
+	     (length '(arg* ...)))
+       (set! (*emitter* 'prim-name)
+	     (lambda (arg* ...) b b* ...)))]))
+
+(define (primitive? x)
+  (and (symbol? x) (*is-prim* x)))
+
+(define (primitive-emitter x)
+  (or (*emitter* x)
+      (error 'primitive-emitter "it's not a primitive or has no emitter")))
+
+(define (arg-count? x)
+  (or (*arg-count* x)
+      (error 'count-error "no arg-count")))
+
+(define (primcall? expr)
+  (and (pair? expr)
+       (primitive? (car expr))))
+
+(define (emit-primcall expr)
+  (let ([prim (car expr)]
+	[args (cdr expr)])
+    (check-primcall-args prim args)
+    (apply (primitive-emitter prim) args)))
+
+(define (emit-expr expr)
+  (cond
+   [(immediata? expr) (emit-immediate expr)]
+   [(primcall? expr) (emit-primcall expr)]
+   [else (error 'emit-expr "expression does not match supported ones")]))
+
+(define (emit-program expr)
+  (emit-function-header "scheme_entry")
+  (emit-expr expr)
+  (emit "ret"))
 
 (define (compile-program x port)
   (unless (immediate? x) (error 'immediaterror "not an immediate"))
