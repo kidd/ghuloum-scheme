@@ -3,6 +3,21 @@
 ;; (load "tests/tests-1.2-req.scm")
 (load "tests/tests-1.3-req.scm")
 
+(define *is-prim* (make-object-property))
+(define *emitter* (make-object-property))
+(define *arg-count* (make-object-property))
+(define *port* #f)
+
+(define-syntax define-primitive
+  (syntax-rules ()
+    [(_ (prim-name arg* ...) b b* ...)
+     (begin
+       (set! (*is-prim* 'prim-name) #t)
+       (set! (*arg-count* 'prim-name)
+	     (length '(arg* ...)))
+       (set! (*emitter* 'prim-name)
+	     (lambda (arg* ...) b b* ...)))]))
+
 ;;; immediates
 
 (define fxshift 2)
@@ -29,22 +44,10 @@
    ((null? x) #b00111111)))
 
 ;;; unary functions 1.3
-(define *is-prim* (make-object-property))
-(define *emitter* (make-object-property))
-(define *arg-count* (make-object-property))
-
-(define-syntax define-primitive
-  (syntax-rules ()
-    [(_ (prim-name arg* ...) b b* ...)
-     (begin
-       (set! (*is-prim* 'prim-name) #t)
-       (set! (*arg-count* 'prim-name)
-	     (length '(arg* ...)))
-       (set! (*emitter* 'prim-name)
-	     (lambda (arg* ...) b b* ...)))]))
 
 (define (primitive? x)
-  (and (symbol? x) (*is-prim* x)))
+  (and (symbol? x)
+       (*is-prim* x)))
 
 (define (primitive-emitter x)
   (or (*emitter* x)
@@ -58,19 +61,26 @@
   (and (pair? expr)
        (primitive? (car expr))))
 
-;; (define (emit-primcall expr)
-;;   (let ([prim (car expr)]
-;; 	[args (cdr expr)])
-;;     (check-primcall-args prim args)
-;;     (apply (primitive-emitter prim) args)))
+(define (check-primcall-args prim args)
+  (if (= (arg-count? prim) (length args)) #t
+      (error 'check-primcall-args "incorrect number of actual parameters")))
+
+;;; emitters
+(define (emit-primcall expr)
+  (let ([prim (car expr)]
+	[args (cdr expr)])
+    (check-primcall-args prim args)
+    (apply (primitive-emitter prim) args)))
 
 (define (emit-immediate expr port)
   (emit port "movl $~s, %eax" (immediate-rep expr)))
 
+
 (define (emit-expr port expr)
+  (set! *port* port)
   (cond
    [(immediate? expr) (emit-immediate expr port)]
-;   [(primcall? expr) (emit-primcall expr)]
+   [(primcall? expr) (emit-primcall expr)]
    [else (error 'emit-expr "expression does not match supported ones")]))
 
 (define (emit-program expr port)
@@ -84,13 +94,23 @@
   (emit port ".type ~a, @function" label)
   (emit port "~a:" label))
 
-(define (compile-program x port)
-  (unless (immediate? x) (error 'immediaterror "not an immediate"))
-  (emit port ".text")
-  (emit port ".globl scheme_entry")
-  (emit port ".type scheme_entry, @function")
-  (emit port "scheme_entry:")
-  (emit port "movl $~s, %eax" (immediate-rep x))
-  (emit port "ret"))
+;; (define (compile-program x port)
+;;   (unless (immediate? x) (error 'immediaterror "not an immediate"))
+;;   (emit port ".text")
+;;   (emit port ".globl scheme_entry")
+;;   (emit port ".type scheme_entry, @function")
+;;   (emit port "scheme_entry:")
+;;   (emit port "movl $~s, %eax" (immediate-rep x))
+;;   (emit port "ret"))
+
+(define-primitive (fxadd1 arg)
+  (emit-expr *port* arg)
+  (emit *port* "addl $~s, %eax" (immediate-rep 1)))
+
+(define-primitive (fixnum->char arg)
+  (emit-expr arg)
+  (emit "shll $~s, %eax" (- charshift fxshift))
+  (emit "orl $~s, %eax" chartag))
+
 
 (test-all)
