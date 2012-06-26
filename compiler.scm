@@ -21,14 +21,22 @@
 ;;; immediates
 
 (define fxshift 2)
+(define charshift 8)
+
 (define fxmask #x03)
-(define bool_f #x2F)
-(define bool_t #x6F)
+(define fxtag #b00000000)
+
+(define bool-f #x2F)
+(define bool-t #x6F)
 (define wordsize 4) ;byte
+(define null-b  #b00111111)
 
 (define fixnum-bits (- (* wordsize 8) fxshift))
+(define bool-bit wordsize)
 (define fxlower (- (expt 2 (- fixnum-bits 1))))	  ;min fixnum
 (define fxupper (- (expt 2 (- fixnum-bits 1)) 1)) ;max fixnum
+(define chartag #b00001111)
+
 
 (define (fixnum? x)
   (and (integer? x) (exact? x) (<= fxlower x fxupper)))
@@ -39,9 +47,9 @@
 (define (immediate-rep x)
   (cond
    ((fixnum? x) (ash x fxshift))
-   ((boolean? x) (if x bool_t bool_f))
+   ((boolean? x) (if x bool-t bool-f))
    ((char? x) (logior (ash (char->integer x) 8) #b1111))
-   ((null? x) #b00111111)))
+   ((null? x) null-b)))
 
 ;;; unary functions 1.3
 
@@ -108,9 +116,64 @@
   (emit *port* "addl $~s, %eax" (immediate-rep 1)))
 
 (define-primitive (fixnum->char arg)
-  (emit-expr arg)
-  (emit "shll $~s, %eax" (- charshift fxshift))
-  (emit "orl $~s, %eax" chartag))
+  (emit-expr *port* arg)
+  (emit *port* "shll $~s, %eax" (- charshift fxshift))
+  (emit *port* "orl $~s, %eax" chartag))
 
+(define-primitive (char->fixnum arg)
+  (emit-expr *port* arg)
+  (emit *port* "shr $~s, %eax" (- charshift fxshift)))
+
+(define-primitive (fixnum? arg)
+  (emit-expr *port* arg)
+  (emit *port* "and $~s, %al" fxmask)
+  (emit *port* "cmp $0, %al" )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (null? arg)
+  (emit-expr *port* arg)
+  (emit *port* "cmp $~s, %al" null-b )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (char? arg)
+  (emit-expr *port* arg)
+  (emit *port* "and $~s, %al" #b11111111 )
+  (emit *port* "cmp $~s, %al" chartag )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+;; (define-primitive (boolean? arg)
+;;   (emit-expr *port* arg)
+;;   (emit *port* "and $~s, %al" bool-f )
+;;   (emit *port* "sete %al")
+;;   (emit *port* "movzbl %al, %eax")
+;;   (emit *port* "sal $~s, %al" 6)
+;;   (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (not arg)
+  (emit-expr *port* arg)
+  (emit *port* "cmp $~s, %al" bool-f )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+
+;;; we don't check fixnum type but we take for granted that fxtag is 00
+(define-primitive (fxzero? arg)
+  (emit-expr *port* arg)
+  (emit *port* "test %eax, %eax")
+  (emit *port* "setz %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
 
 (test-all)
