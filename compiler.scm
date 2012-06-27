@@ -1,8 +1,9 @@
 (load "tests/tests-driver.scm")
-(load "tests/tests-1.1-req.scm")
-(load "tests/tests-1.2-req.scm")
-(load "tests/tests-1.3-req.scm")
-(load "tests/tests-1.4-req.scm")
+;; (load "tests/tests-1.1-req.scm")
+;; (load "tests/tests-1.2-req.scm")
+;; (load "tests/tests-1.3-req.scm")
+;; (load "tests/tests-1.4-req.scm")
+(load "tests/tests-1.5-req.scm")
 
 (define *is-prim* (make-object-property))
 (define *emitter* (make-object-property))
@@ -11,13 +12,13 @@
 
 (define-syntax define-primitive
   (syntax-rules ()
-    [(_ (prim-name arg* ...) b b* ...)
+    [(_ (prim-name si arg* ...) b b* ...)
      (begin
        (set! (*is-prim* 'prim-name) #t)
        (set! (*arg-count* 'prim-name)
 	     (length '(arg* ...)))
        (set! (*emitter* 'prim-name)
-	     (lambda (arg* ...) b b* ...)))]))
+	     (lambda (si arg* ...) b b* ...)))]))
 
 ;;; immediates
 
@@ -75,30 +76,36 @@
       (error 'check-primcall-args "incorrect number of actual parameters")))
 
 ;;; emitters
-(define (emit-primcall expr)
+(define (emit-primcall si expr)
   (let ([prim (car expr)]
 	[args (cdr expr)])
     (check-primcall-args prim args)
-    (apply (primitive-emitter prim) args)))
+    (apply (primitive-emitter prim) si args)))
 
 (define (emit-immediate expr port)
   (emit port "movl $~s, %eax" (immediate-rep expr)))
 
-(define (emit-expr port expr)
+(define (emit-expr port si expr)
   (set! *port* port)
   (cond
    [(immediate? expr) (emit-immediate expr port)]
-   [(primcall? expr) (emit-primcall expr)]
-   [(if? expr) (emit-if expr)]
+   [(primcall? expr) (emit-primcall si expr)]
+   [(if? expr) (emit-if si expr)]
    [else (error 'emit-expr "expression does not match supported ones")]))
 
 (define (emit-program expr port)
+  (emit port ".text")
+  (emit-function-header port "L_scheme_entry")
+  (emit-expr port (- wordsize) expr)
+  (emit port "ret")
   (emit-function-header port "scheme_entry")
-  (emit-expr port expr)
+  (emit port "movl %esp, %ecx")
+  (emit port "movl 4(%esp), %esp")
+  (emit port "call L_scheme_entry")
+  (emit port "movl %ecx, %esp")
   (emit port "ret"))
 
 (define (emit-function-header port label)
-  (emit port ".text")
   (emit port ".globl ~a" label)
   (emit port ".type ~a, @function" label)
   (emit port "~a:" label))
@@ -112,25 +119,25 @@
 ;;   (emit port "movl $~s, %eax" (immediate-rep x))
 ;;   (emit port "ret"))
 
-(define-primitive (fxadd1 arg)
-  (emit-expr *port* arg)
+(define-primitive (fxadd1 si arg)
+  (emit-expr *port* si arg)
   (emit *port* "addl $~s, %eax" (immediate-rep 1)))
 
-(define-primitive (fxsub1 arg)
-  (emit-expr *port* arg)
+(define-primitive (fxsub1 si arg)
+  (emit-expr *port* si arg)
   (emit *port* "subl $~s, %eax" (immediate-rep 1)))
 
-(define-primitive (fixnum->char arg)
-  (emit-expr *port* arg)
+(define-primitive (fixnum->char si arg)
+  (emit-expr *port* si arg)
   (emit *port* "shll $~s, %eax" (- charshift fxshift))
   (emit *port* "orl $~s, %eax" chartag))
 
-(define-primitive (char->fixnum arg)
-  (emit-expr *port* arg)
+(define-primitive (char->fixnum si arg)
+  (emit-expr *port* si arg)
   (emit *port* "shr $~s, %eax" (- charshift fxshift)))
 
-(define-primitive (fixnum? arg)
-  (emit-expr *port* arg)
+(define-primitive (fixnum? si arg)
+  (emit-expr *port* si arg)
   (emit *port* "and $~s, %al" fxmask)
   (emit *port* "cmp $0, %al" )
   (emit *port* "sete %al")
@@ -138,16 +145,16 @@
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-(define-primitive (null? arg)
-  (emit-expr *port* arg)
+(define-primitive (null? si arg)
+  (emit-expr *port* si arg)
   (emit *port* "cmp $~s, %al" null-b)
   (emit *port* "sete %al")
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-(define-primitive (char? arg)
-  (emit-expr *port* arg)
+(define-primitive (char? si arg)
+  (emit-expr *port* si arg)
   (emit *port* "and $~s, %al" #b11111111)
   (emit *port* "cmp $~s, %al" chartag )
   (emit *port* "sete %al")
@@ -155,8 +162,8 @@
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-(define-primitive (boolean? arg)
-  (emit-expr *port* arg)
+(define-primitive (boolean? si arg)
+  (emit-expr *port* si arg)
   (emit *port* "or $~s, %al" #b01000000)
   (emit *port* "cmp $~s, %al" bool-t)
 
@@ -165,8 +172,8 @@
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-(define-primitive (not arg)
-  (emit-expr *port* arg)
+(define-primitive (not si arg)
+  (emit-expr *port* si arg)
   (emit *port* "cmp $~s, %al" bool-f )
   (emit *port* "sete %al")
   (emit *port* "movzbl %al, %eax")
@@ -174,18 +181,32 @@
   (emit *port* "or $~s, %al" bool-f))
 
 ;;; we don't check fixnum type but we take for granted that fxtag is 00
-(define-primitive (fxzero? arg)
-  (emit-expr *port* arg)
+(define-primitive (fxzero? si arg)
+  (emit-expr *port* si arg)
   (emit *port* "test %eax, %eax")
   (emit *port* "setz %al")
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-(define-primitive (fxlognot arg)
-  (emit-expr *port* arg)
+(define-primitive (fxlognot si arg)
+  (emit-expr *port* si arg)
   (emit *port* "xor $~s, %eax" #xFFFFFFFF)
   (emit *port* "and $~s, %al" #b11111100))
+
+(define-primitive (fx+ si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "addl ~s(%esp), %eax" si))
+
+;;; HACK it evaluates the arguments in different order than fx+
+(define-primitive (fx- si arg1 arg2)
+  (emit-expr *port* si arg2)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg1)
+  (emit *port* "subl ~s(%esp), %eax" si))
+
 
 
 ;;; 1.4
@@ -208,16 +229,30 @@
 (define (if-altern expr)
   (cadddr expr))
 
-(define (emit-if expr)
+(define (emit-if si expr)
   (let ((alt-label (unique-label))
 	(end-label (unique-label)))
-    (emit-expr *port* (if-test expr))
+    (emit-expr *port* si (if-test expr))
     (emit *port* "cmp $~s, %al" bool-f)
     (emit *port* "je ~a" alt-label)
-    (emit-expr *port* (if-conseq expr))
+    (emit-expr *port* si (if-conseq expr))
     (emit *port* "jmp ~a" end-label)
     (emit *port* "~a:" alt-label)
-    (emit-expr *port* (if-altern expr))
+    (emit-expr *port* si (if-altern expr))
     (emit *port* "~a:" end-label)))
+
+(define-syntax and
+  (syntax-rules ()
+    [(and) #t]
+    [(and test) test]
+    [(and test test* ...)
+     (if test (and test* ...) #f)]))
+
+(define-syntax or
+  (syntax-rules ()
+    [(or) #t]
+    [(or test) test]
+    [(or test test* ...)
+     (if test #t (or test* ...))]))
 
 (test-all)
