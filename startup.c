@@ -2,7 +2,7 @@
 /* define all scheme constants */
 #define bool_f               0x2F
 #define bool_t               0x6F
-#define null                 0b00111111
+#define null                 0b00111111 /* 91? */
 #define fx_mask              0x03
 #define fx_tag               0x00
 #define fx_shift                2

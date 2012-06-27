@@ -83,7 +83,6 @@
 (define (emit-immediate expr port)
   (emit port "movl $~s, %eax" (immediate-rep expr)))
 
-
 (define (emit-expr port expr)
   (set! *port* port)
   (cond
@@ -135,7 +134,7 @@
 
 (define-primitive (null? arg)
   (emit-expr *port* arg)
-  (emit *port* "cmp $~s, %al" null-b )
+  (emit *port* "cmp $~s, %al" null-b)
   (emit *port* "sete %al")
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
@@ -143,20 +142,22 @@
 
 (define-primitive (char? arg)
   (emit-expr *port* arg)
-  (emit *port* "and $~s, %al" #b11111111 )
+  (emit *port* "and $~s, %al" #b11111111)
   (emit *port* "cmp $~s, %al" chartag )
   (emit *port* "sete %al")
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-;; (define-primitive (boolean? arg)
-;;   (emit-expr *port* arg)
-;;   (emit *port* "and $~s, %al" bool-f )
-;;   (emit *port* "sete %al")
-;;   (emit *port* "movzbl %al, %eax")
-;;   (emit *port* "sal $~s, %al" 6)
-;;   (emit *port* "or $~s, %al" bool-f))
+(define-primitive (boolean? arg)
+  (emit-expr *port* arg)
+  (emit *port* "or $~s, %al" #b01000000)
+  (emit *port* "cmp $~s, %al" bool-t)
+
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
 
 (define-primitive (not arg)
   (emit-expr *port* arg)
@@ -166,7 +167,6 @@
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
-
 ;;; we don't check fixnum type but we take for granted that fxtag is 00
 (define-primitive (fxzero? arg)
   (emit-expr *port* arg)
@@ -175,5 +175,10 @@
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (fxlognot arg)
+  (emit-expr *port* arg)
+  (emit *port* "xor $~s, %eax" #xFFFFFFFF)
+  (emit *port* "and $~s, %al" #b11111100))
 
 (test-all)
