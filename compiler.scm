@@ -1,7 +1,8 @@
 (load "tests/tests-driver.scm")
-;; (load "tests/tests-1.1-req.scm")
-;; (load "tests/tests-1.2-req.scm")
+(load "tests/tests-1.1-req.scm")
+(load "tests/tests-1.2-req.scm")
 (load "tests/tests-1.3-req.scm")
+(load "tests/tests-1.4-req.scm")
 
 (define *is-prim* (make-object-property))
 (define *emitter* (make-object-property))
@@ -88,6 +89,7 @@
   (cond
    [(immediate? expr) (emit-immediate expr port)]
    [(primcall? expr) (emit-primcall expr)]
+   [(if? expr) (emit-if expr)]
    [else (error 'emit-expr "expression does not match supported ones")]))
 
 (define (emit-program expr port)
@@ -113,6 +115,10 @@
 (define-primitive (fxadd1 arg)
   (emit-expr *port* arg)
   (emit *port* "addl $~s, %eax" (immediate-rep 1)))
+
+(define-primitive (fxsub1 arg)
+  (emit-expr *port* arg)
+  (emit *port* "subl $~s, %eax" (immediate-rep 1)))
 
 (define-primitive (fixnum->char arg)
   (emit-expr *port* arg)
@@ -180,5 +186,38 @@
   (emit-expr *port* arg)
   (emit *port* "xor $~s, %eax" #xFFFFFFFF)
   (emit *port* "and $~s, %al" #b11111100))
+
+
+;;; 1.4
+(define unique-label
+  (let ((count 0))
+    (lambda ()
+      (let ((L (simple-format #f "L~s" count)))
+	(set! count (+ 1 count))
+	L))))
+
+(define (if? expr)
+  (eq? (car expr) 'if))
+
+(define (if-test expr)
+  (cadr expr))
+
+(define (if-conseq expr)
+  (caddr expr))
+
+(define (if-altern expr)
+  (cadddr expr))
+
+(define (emit-if expr)
+  (let ((alt-label (unique-label))
+	(end-label (unique-label)))
+    (emit-expr *port* (if-test expr))
+    (emit *port* "cmp $~s, %al" bool-f)
+    (emit *port* "je ~a" alt-label)
+    (emit-expr *port* (if-conseq expr))
+    (emit *port* "jmp ~a" end-label)
+    (emit *port* "~a:" alt-label)
+    (emit-expr *port* (if-altern expr))
+    (emit *port* "~a:" end-label)))
 
 (test-all)
