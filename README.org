@@ -8,6 +8,10 @@
    https://bitbucket.org/rgrau/ghuloum-scheme
    http://scheme2006.cs.uchicago.edu/#anincrementalapproachtocompilerconstruction
 
+
+*** Auxiliary links
+    http://markshroyer.com/2012/06/c-both-true-and-false/jj
+
 ** Author
    Abdulaziz Ghuloum (original)
    Raimon Grau (port)
