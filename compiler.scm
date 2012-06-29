@@ -216,6 +216,85 @@
   (emit *port* "mul %ebx"))
 
 
+;;; doesn't expand correctly the first emits
+;; (define-syntax define-binary-primitive
+;;   (syntax-rules ()
+;;     [(_ (prim-name si arg* ...) b* ...)
+;;      (define-primitive (prim-name si arg* ...)
+;;        (emit-expr *port* si arg1)
+;;        (emit *port* "movl %eax, ~s(%esp)" si)
+;;        (emit-expr *port* (- si wordsize) arg2)
+;;        b* ...)]))
+
+(define-primitive (fxlogand si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "and ~s(%esp), %eax" si))
+
+(define-primitive (fxlogor si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "or ~s(%esp), %eax" si))
+
+;; (define-binary-primitive (fxlogand si arg1 arg2)
+;;   (emit *port* "and ~s(%esp), %eax" si))
+
+;; (define-primitive (fxlogor si arg1 arg2)
+;;   (emit *port* "or ~s(%esp), %eax" si))
+
+(define-primitive (fx= si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "cmp %eax, ~s(%esp)" si)
+  (emit *port* "setz %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (fx< si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "cmp %eax, ~s(%esp)" si)
+  (emit *port* "setl %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+
+
+(define-primitive (fx<= si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "cmp %eax, ~s(%esp)" si)
+  (emit *port* "setle %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (fx> si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "cmp %eax, ~s(%esp)" si)
+  (emit *port* "setg %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (fx>= si arg1 arg2)
+  (emit-expr *port* si arg1)
+  (emit *port* "movl %eax, ~s(%esp)" si)
+  (emit-expr *port* (- si wordsize) arg2)
+  (emit *port* "cmp %eax, ~s(%esp)" si)
+  (emit *port* "setge %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
 
 ;;; 1.4
 (define unique-label
