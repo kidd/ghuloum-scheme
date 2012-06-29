@@ -209,15 +209,12 @@
 
 (define-primitive (fx* si arg1 arg2)
   (emit-expr *port* si arg1)
+  (emit *port* "sar $~s, %eax" 2)
   (emit *port* "movl %eax, ~s(%esp)" si)
   (emit-expr *port* (- si wordsize) arg2)
-  ;; (emit *port* "shll $~s, %ebx" 2)
   (emit *port* "movl ~s(%esp), %ebx" si)
-  (emit *port* "mul %ebx")
-  (emit *port* "sar $~s, %eax" 2)
-  (emit *port* "and $~s, %al" #b00000000)
-  (emit *port* "or $~s, %al"  #b00000011)
-  )
+  (emit *port* "mul %ebx"))
+
 
 
 ;;; 1.4
