@@ -11,6 +11,13 @@
 
 *** Auxiliary links
     http://markshroyer.com/2012/06/c-both-true-and-false/jj
+    http://vedantk.tumblr.com/post/26182854460/higher-order-programming-in-c
+
+
+
+** still todo
+   - char= .... operations
+   - let*
 
 ** Author
    Abdulaziz Ghuloum (original)

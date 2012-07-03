@@ -69,12 +69,28 @@ static void deallocate_protected_space(char* p, int size){
   if(status != 0){ error("munmap error"); }
 }
 
+typedef struct {
+  void* eax; /* 0 */
+  void* ebx; /* 4 */
+  void* ecx; /* 8 */
+  void* edx; /* 12 */
+  void* esi; /* 16 */
+  void* edi; /* 20 */
+  void* ebp; /* 24 */
+  void* esp; /* 28 */
+} context;
+
+
 int main(int argc, char** argv){
   int stack_size = (16 * 4096); /* holds 16K cells */
   char* stack_top = allocate_protected_space(stack_size);
   char* stack_base = stack_top + stack_size;
-  print_ptr(scheme_entry(stack_base));
+  char* heap_base = allocate_protected_space(stack_size);
+
+  context ctxt;
+  print_ptr(scheme_entry(&ctxt, stack_base, heap_base));
   deallocate_protected_space(stack_top, stack_size);
+  deallocate_protected_space(heap_base, stack_size);
   return 0;
 }
 

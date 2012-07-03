@@ -1,10 +1,14 @@
 (load "tests/tests-driver.scm")
-(load "tests/tests-1.1-req.scm")
-(load "tests/tests-1.2-req.scm")
-(load "tests/tests-1.3-req.scm")
-(load "tests/tests-1.4-req.scm")
-(load "tests/tests-1.5-req.scm")
-(load "tests/tests-1.6-req.scm")
+;; (load "tests/tests-1.1-req.scm")
+;; (load "tests/tests-1.2-req.scm")
+;; (load "tests/tests-1.3-req.scm")
+;; (load "tests/tests-1.4-req.scm")
+;; (load "tests/tests-1.5-req.scm")
+;; (load "tests/tests-1.6-req.scm")
+;; (load "tests/tests-1.7-req.scm")
+(load "tests/tests-1.8-req.scm")
+;; (load "tests/tests-2.4-req.scm")
+;; (load "tests/tests-2.1-req.scm")
 
 (define *is-prim* (make-object-property))
 (define *emitter* (make-object-property))
@@ -40,6 +44,11 @@
 (define fxupper (- (expt 2 (- fixnum-bits 1)) 1)) ;max fixnum
 (define chartag #b00001111)
 
+(define pairtag #b001)
+(define closuretag #b010)
+(define symboltag #b011)
+(define vectortag #b101)
+(define stringtag #b110)
 
 (define (fixnum? x)
   (and (integer? x) (exact? x) (<= fxlower x fxupper)))
@@ -91,6 +100,8 @@
   (emit port "movl $~s, %eax" (immediate-rep expr)))
 
 
+(define (extend-env var-name si env)
+  (cons (cons var-name si) env))
 
 (define (emit-let si env expr)
   (define (let-body expr) (caddr expr))
@@ -101,8 +112,6 @@
     (emit *port* "movl %eax, ~s(%esp)" si))
   (define (next-stack-index si)
     (- si 4))
-  (define (extend-env var-name si env)
-    (cons (cons var-name si) env))
   (define (process-let bindings si new-env)
     (cond
      ((null? bindings)
@@ -116,12 +125,55 @@
 		     (extend-env (lhs b) si new-env))))))
   (process-let (let-bindings expr) si env))
 
+(define (emit-letrec expr)
+  (define (letrec-bindings x) (cadr x))
+  (define (letrec-body x) (caddr x))
+  (define rhs cadr)
+  (define lhs car)
+  (define (unique-labels labels)
+    (map (lambda (x) (unique-label)) labels))
+  (define (make-initial-env lvars labels)
+    (map
+     (lambda (x y) (cons x y))
+     lvars labels))
+  (let* ((bindings (letrec-bindings expr))
+	 (lvars (map lhs bindings))
+	 (lambdas (map rhs bindings))
+	 (labels (unique-labels lvars))
+	 (env (make-initial-env lvars labels)))
+    (for-each (emit-lambda env) lambdas labels)
+    ;(emit-scheme-entry (letrec-body expr) env)
+    ))
+
+(define (emit-scheme-entry body env)
+  (emit-expr *port* si env body))
+
+(define (emit-lambda env)
+  (define (lambda-formals expr) (cadr expr))
+  (define (lambda-body expr) (caddr expr))
+  (define emmpty? null?)
+  (lambda (expr label)
+    (emit-function-header label)
+    (let ([fmls (lambda-formals expr)]
+	  [body (lambda-body expr)])
+      (let f ([fmls fmls] [si (- wordsize)] [env env])
+	(cond
+	 [(empty? fmls) (emit-expr si env body)]
+	 [else
+	  (f (cdr fmls)
+	     (- si wordsize)
+	     (extend-env (car fmls) si env))])))))
+
+
 (define (emit-variable-ref env var)
   (display env)
   (emit *port* "movl ~s(%esp), %eax" (cdr (assoc var env))))
 
 (define (variable? x)
   (symbol? x))
+
+(define (letrec? expr)
+  (eq? (car expr) 'letrec))
 
 (define (emit-expr port si env expr)
   (set! *port* port)
@@ -130,6 +182,7 @@
    [(variable? expr) (emit-variable-ref env expr)]
    [(primcall? expr) (emit-primcall si env expr)]
    [(let? expr) (emit-let si env expr)]
+   [(letrec? expr) (emit-letrec expr)]
    [(if? expr) (emit-if si env expr)]
    [else (error 'emit-expr "expression does not match supported ones")]))
 
@@ -140,10 +193,23 @@
   (emit-expr port (- wordsize) env expr)
   (emit port "ret")
   (emit-function-header port "scheme_entry")
-  (emit port "movl %esp, %ecx")
-  (emit port "movl 4(%esp), %esp")
+  ;; (emit port "movl %esp, %ecx")
+  (emit port "movl -4(%esp), %ecx")
+  (emit port "movl %ebx, 4(%ecx)")
+  (emit port "movl %esi, 16(%ecx)")
+  (emit port "movl %edi, 20(%ecx)")
+  (emit port "movl %ebp, 24(%ecx)")
+  (emit port "movl %esp, 28(%ecx)")
+  (emit port "movl -12(%esp), %ebp")
+  (emit port "movl 8(%esp), %esp")
+  (emit port "movl -12(%esp), %esi")
+
   (emit port "call L_scheme_entry")
-  (emit port "movl %ecx, %esp")
+  (emit port "movl 4(%ecx), %ebx")
+  (emit port "movl 16(%ecx), %esi")
+  (emit port "movl 20(%ecx), %edi")
+  (emit port "movl 24(%ecx), %ebp")
+  (emit port "movl 28(%ecx), %esp")
   (emit port "ret"))
 
 (define (emit-function-header port label)
@@ -203,11 +269,55 @@
   (emit *port* "sal $~s, %al" 6)
   (emit *port* "or $~s, %al" bool-f))
 
+(define-primitive (pair? si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "and $~s, %al" #b00000111)
+  (emit *port* "cmp $~s, %al" pairtag)
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (vector? si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "and $~s, %al" #b00000111)
+  (emit *port* "cmp $~s, %alf" vectortag )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (string? si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "and $~s, %al" #b00000111)
+  (emit *port* "cmp $~s, %alf" stringtag )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (symbol? si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "and $~s, %al" #b00000111)
+  (emit *port* "cmp $~s, %alf" symboltag )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
+(define-primitive (closure? si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "and $~s, %al" #b00000111)
+  (emit *port* "cmp $~s, %alf" closuretag )
+  (emit *port* "sete %al")
+  (emit *port* "movzbl %al, %eax")
+  (emit *port* "sal $~s, %al" 6)
+  (emit *port* "or $~s, %al" bool-f))
+
 (define-primitive (boolean? si env arg)
   (emit-expr *port* si env arg)
   (emit *port* "or $~s, %al" #b01000000)
   (emit *port* "cmp $~s, %al" bool-t)
-
   (emit *port* "sete %al")
   (emit *port* "movzbl %al, %eax")
   (emit *port* "sal $~s, %al" 6)
@@ -240,6 +350,22 @@
   (emit *port* "movl %eax, ~s(%esp)" si)
   (emit-expr *port* (- si wordsize) env arg2)
   (emit *port* "addl ~s(%esp), %eax" si))
+
+(define-primitive (cons si env arg1 arg2)
+  (emit-expr *port* si env arg1)
+  (emit *port* "movl %eax, 0(%esi)")
+  (emit-expr *port* (- si wordsize) env arg2)
+  (emit *port* "movl %eax, 4(%esi)")
+  (emit *port* "orl $1, %eax")
+  (emit *port* "addl $8, %esi"))
+
+(define-primitive (car si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "movl -1(%eax), %eax"))
+
+(define-primitive (cdr si env arg)
+  (emit-expr *port* si env arg)
+  (emit *port* "movl 3(%eax), %eax"))
 
 ;;; HACK it evaluates the arguments in different order than fx+
 (define-primitive (fx- si env arg1 arg2)
